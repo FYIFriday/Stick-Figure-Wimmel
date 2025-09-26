@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Tileable Image Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #222;
+        }
+
+        #viewer {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            background-image: url('infinite_scroll.png');
+            background-repeat: repeat;
+            background-position: 0px 0px;
+            position: relative;
+        }
+
+        #viewer:active {
+            cursor: grabbing;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        .file-input {
+            margin-top: 10px;
+        }
+
+        .file-input input {
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        .zoom-controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        .zoom-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 12px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body>
+    <div id="viewer"></div>
+    
+    <div class="controls">
+        <div><strong>Infinite Tile Viewer</strong></div>
+        <div>Drag to pan • Mouse wheel to zoom</div>
+    </div>
+
+    <div class="zoom-controls">
+        <button class="zoom-btn" id="zoomOut">−</button>
+        <button class="zoom-btn" id="zoomIn">+</button>
+        <button class="zoom-btn" id="resetZoom">Reset</button>
+    </div>
+
+    <div class="info">
+        <div>Zoom: <span id="zoomLevel">100%</span></div>
+        <div>Position: <span id="position">0, 0</span></div>
+    </div>
+
+    <script>
+        class InfiniteTileViewer {
+            constructor() {
+                this.viewer = document.getElementById('viewer');
+                this.isDragging = false;
+                this.lastX = 0;
+                this.lastY = 0;
+                this.offsetX = 0;
+                this.offsetY = 0;
+                this.scale = 2.5;
+                
+                this.initEventListeners();
+                this.updateDisplay();
+            }
+
+            initEventListeners() {
+                // Mouse events
+                this.viewer.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.lastX = e.clientX;
+                    this.lastY = e.clientY;
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!this.isDragging) return;
+                    
+                    const deltaX = e.clientX - this.lastX;
+                    const deltaY = e.clientY - this.lastY;
+                    
+                    this.offsetX += deltaX;
+                    this.offsetY += deltaY;
+                    
+                    this.lastX = e.clientX;
+                    this.lastY = e.clientY;
+                    
+                    this.updateDisplay();
+                });
+
+                document.addEventListener('mouseup', () => {
+                    this.isDragging = false;
+                });
+
+                // Touch events for mobile
+                this.viewer.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        this.isDragging = true;
+                        this.lastX = e.touches[0].clientX;
+                        this.lastY = e.touches[0].clientY;
+                        e.preventDefault();
+                    }
+                });
+
+                document.addEventListener('touchmove', (e) => {
+                    if (!this.isDragging || e.touches.length !== 1) return;
+                    
+                    const deltaX = e.touches[0].clientX - this.lastX;
+                    const deltaY = e.touches[0].clientY - this.lastY;
+                    
+                    this.offsetX += deltaX;
+                    this.offsetY += deltaY;
+                    
+                    this.lastX = e.touches[0].clientX;
+                    this.lastY = e.touches[0].clientY;
+                    
+                    this.updateDisplay();
+                    e.preventDefault();
+                });
+
+                document.addEventListener('touchend', () => {
+                    this.isDragging = false;
+                });
+
+                // Wheel zoom
+                this.viewer.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    
+                    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                    const newScale = Math.max(0.1, Math.min(15, this.scale * zoomFactor));
+                    
+                    if (newScale !== this.scale) {
+                        // Zoom towards mouse cursor
+                        const rect = this.viewer.getBoundingClientRect();
+                        const centerX = e.clientX - rect.left;
+                        const centerY = e.clientY - rect.top;
+                        
+                        const scaleRatio = newScale / this.scale;
+                        this.offsetX = centerX - (centerX - this.offsetX) * scaleRatio;
+                        this.offsetY = centerY - (centerY - this.offsetY) * scaleRatio;
+                        
+                        this.scale = newScale;
+                        this.updateDisplay();
+                    }
+                });
+
+                // Zoom buttons
+                document.getElementById('zoomIn').addEventListener('click', () => {
+                    this.scale = Math.min(15, this.scale * 1.2);
+                    this.updateDisplay();
+                });
+
+                document.getElementById('zoomOut').addEventListener('click', () => {
+                    this.scale = Math.max(0.1, this.scale * 0.8);
+                    this.updateDisplay();
+                });
+
+                document.getElementById('resetZoom').addEventListener('click', () => {
+                    this.scale = 2.5;
+                    this.offsetX = 0;
+                    this.offsetY = 0;
+                    this.updateDisplay();
+                });
+
+                // File upload - removed since image is baked in
+            }
+
+            updateDisplay() {
+                const scaledOffsetX = this.offsetX;
+                const scaledOffsetY = this.offsetY;
+                
+                this.viewer.style.backgroundPosition = `${scaledOffsetX}px ${scaledOffsetY}px`;
+                this.viewer.style.backgroundSize = `${512 * this.scale}px ${512 * this.scale}px`;
+                
+                // Update info display
+                document.getElementById('zoomLevel').textContent = `${Math.round(this.scale * 100)}%`;
+                document.getElementById('position').textContent = `${Math.round(scaledOffsetX)}, ${Math.round(scaledOffsetY)}`;
+            }
+        }
+
+        // Initialize the viewer when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new InfiniteTileViewer();
+        });
+    </script>
+</body>
+</html>
