@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Infinite Wimmel</title>
+    <title>Infinite Chaos</title>
     <style>
         body {
             margin: 0;
@@ -17,6 +17,7 @@
             width: 100vw;
             height: 100vh;
             cursor: grab;
+            /* Replace this with the path to your tileable image */
             background-image: url('infinite_scroll.png');
             background-repeat: repeat;
             background-position: 0px 0px;
@@ -97,8 +98,8 @@
     <div id="viewer"></div>
     
     <div class="controls">
-        <div><strong>My Strange Dream</strong></div>
-        <div>Can you find the wizard?</div>
+        <div><strong>Welcome to my fever dream</strong></div>
+        <div>who's your favorite?</div>
     </div>
 
     <div class="zoom-controls">
@@ -122,9 +123,25 @@
                 this.offsetX = 0;
                 this.offsetY = 0;
                 this.scale = 2.5;
+                this.lastTouchDistance = 0;
                 
                 this.initEventListeners();
                 this.updateDisplay();
+            }
+
+            getTouchDistance(touches) {
+                if (touches.length < 2) return 0;
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            getTouchCenter(touches) {
+                if (touches.length < 2) return { x: touches[0].clientX, y: touches[0].clientY };
+                return {
+                    x: (touches[0].clientX + touches[1].clientX) / 2,
+                    y: (touches[0].clientY + touches[1].clientY) / 2
+                };
             }
 
             initEventListeners() {
@@ -161,28 +178,65 @@
                         this.isDragging = true;
                         this.lastX = e.touches[0].clientX;
                         this.lastY = e.touches[0].clientY;
-                        e.preventDefault();
+                    } else if (e.touches.length === 2) {
+                        this.isDragging = false;
+                        this.lastTouchDistance = this.getTouchDistance(e.touches);
                     }
-                });
-
-                document.addEventListener('touchmove', (e) => {
-                    if (!this.isDragging || e.touches.length !== 1) return;
-                    
-                    const deltaX = e.touches[0].clientX - this.lastX;
-                    const deltaY = e.touches[0].clientY - this.lastY;
-                    
-                    this.offsetX += deltaX;
-                    this.offsetY += deltaY;
-                    
-                    this.lastX = e.touches[0].clientX;
-                    this.lastY = e.touches[0].clientY;
-                    
-                    this.updateDisplay();
                     e.preventDefault();
                 });
 
-                document.addEventListener('touchend', () => {
-                    this.isDragging = false;
+                document.addEventListener('touchmove', (e) => {
+                    if (e.touches.length === 1 && this.isDragging) {
+                        // Single finger drag - pan
+                        const deltaX = e.touches[0].clientX - this.lastX;
+                        const deltaY = e.touches[0].clientY - this.lastY;
+                        
+                        this.offsetX += deltaX;
+                        this.offsetY += deltaY;
+                        
+                        this.lastX = e.touches[0].clientX;
+                        this.lastY = e.touches[0].clientY;
+                        
+                        this.updateDisplay();
+                    } else if (e.touches.length === 2) {
+                        // Two finger pinch - zoom
+                        const currentDistance = this.getTouchDistance(e.touches);
+                        const center = this.getTouchCenter(e.touches);
+                        const rect = this.viewer.getBoundingClientRect();
+                        const centerX = center.x - rect.left;
+                        const centerY = center.y - rect.top;
+                        
+                        if (this.lastTouchDistance > 0) {
+                            const zoomRatio = currentDistance / this.lastTouchDistance;
+                            const newScale = Math.max(0.1, Math.min(30, this.scale * zoomRatio));
+                            
+                            if (newScale !== this.scale) {
+                                // Zoom towards touch center
+                                const scaleRatio = newScale / this.scale;
+                                this.offsetX = centerX - (centerX - this.offsetX) * scaleRatio;
+                                this.offsetY = centerY - (centerY - this.offsetY) * scaleRatio;
+                                
+                                this.scale = newScale;
+                                this.updateDisplay();
+                            }
+                        }
+                        
+                        this.lastTouchDistance = currentDistance;
+                    }
+                    e.preventDefault();
+                });
+
+                document.addEventListener('touchend', (e) => {
+                    if (e.touches.length === 0) {
+                        this.isDragging = false;
+                        this.lastTouchDistance = 0;
+                    } else if (e.touches.length === 1) {
+                        // Switch back to drag mode
+                        this.isDragging = true;
+                        this.lastX = e.touches[0].clientX;
+                        this.lastY = e.touches[0].clientY;
+                        this.lastTouchDistance = 0;
+                    }
                 });
 
                 // Wheel zoom
@@ -190,7 +244,7 @@
                     e.preventDefault();
                     
                     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-                    const newScale = Math.max(0.1, Math.min(15, this.scale * zoomFactor));
+                    const newScale = Math.max(0.1, Math.min(30, this.scale * zoomFactor));
                     
                     if (newScale !== this.scale) {
                         // Zoom towards mouse cursor
@@ -209,7 +263,7 @@
 
                 // Zoom buttons
                 document.getElementById('zoomIn').addEventListener('click', () => {
-                    this.scale = Math.min(15, this.scale * 1.2);
+                    this.scale = Math.min(30, this.scale * 1.2);
                     this.updateDisplay();
                 });
 
